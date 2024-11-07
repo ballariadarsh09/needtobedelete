@@ -1,0 +1,219 @@
+// views/index.ejs
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Food Ingredient Analyzer</title>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <style>
+        .loading {
+            display: none;
+        }
+        #video {
+            max-width: 100%;
+            width: 400px;
+            margin: 0 auto;
+        }
+        #canvas {
+            display: none;
+        }
+        .camera-container {
+            position: relative;
+            width: 400px;
+            margin: 0 auto;
+        }
+        .camera-controls {
+            margin-top: 10px;
+            text-align: center;
+        }
+    </style>
+</head>
+<body class="bg-gray-100 min-h-screen">
+    <div class="container mx-auto px-4 py-8">
+        <div class="max-w-2xl mx-auto bg-white rounded-lg shadow-lg p-6">
+            <h1 class="text-3xl font-bold text-center mb-8">Food Ingredient Analyzer</h1>
+
+            <% if (error) { %>
+                <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
+                    <%= error %>
+                </div>
+            <% } %>
+
+            <div class="flex justify-center space-x-4 mb-6">
+                <button onclick="showUploadOption()" class="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600">
+                    Upload Image
+                </button>
+                <button onclick="showCameraOption()" class="px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600">
+                    Use Camera
+                </button>
+            </div>
+
+            <!-- Upload Option -->
+            <div id="uploadOption" class="hidden">
+                <form action="/analyze" method="POST" enctype="multipart/form-data" id="uploadForm" class="space-y-6">
+                    <div class="flex flex-col items-center">
+                        <label class="w-full max-w-xs px-4 py-2 bg-blue-500 text-white rounded-lg cursor-pointer hover:bg-blue-600 text-center">
+                            Select Ingredient Image
+                            <input type="file" name="image" class="hidden" accept="image/*" onchange="previewImage(event)">
+                        </label>
+
+                        <div id="imagePreview" class="mt-4 hidden">
+                            <img id="preview" src="#" alt="Preview" class="max-w-xs rounded-lg">
+                        </div>
+
+                        <button type="submit" 
+                                class="mt-4 px-6 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600"
+                                onclick="showLoading()">
+                            Analyze Ingredient
+                        </button>
+                    </div>
+                </form>
+            </div>
+
+            <!-- Camera Option -->
+            <div id="cameraOption" class="hidden">
+                <div class="camera-container">
+                    <video id="video" autoplay playsinline></video>
+                    <canvas id="canvas"></canvas>
+                </div>
+                <div class="camera-controls">
+                    <button id="captureButton" class="px-6 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 mb-4">
+                        Take Photo
+                    </button>
+                    <div id="retakeContainer" class="hidden">
+                        <button onclick="retakePhoto()" class="px-6 py-2 bg-yellow-500 text-white rounded-lg hover:bg-yellow-600 mr-2">
+                            Retake
+                        </button>
+                        <button onclick="analyzeFromCamera()" class="px-6 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600">
+                            Analyze Photo
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <div id="loading" class="loading mt-4 text-center">
+                <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500 mx-auto"></div>
+                <p class="mt-2">Analyzing image...</p>
+            </div>
+
+            <% if (analysis) { %>
+                <div class="mt-8 p-4 bg-gray-50 rounded-lg">
+                    <h2 class="text-xl font-semibold mb-4">Analysis Results:</h2>
+                    <div class="whitespace-pre-wrap">
+                        <%= analysis %>
+                    </div>
+                </div>
+            <% } %>
+        </div>
+    </div>
+
+    <script>
+        let stream = null;
+        const video = document.getElementById('video');
+        const canvas = document.getElementById('canvas');
+        const captureButton = document.getElementById('captureButton');
+        let photoTaken = false;
+
+        function showUploadOption() {
+            document.getElementById('uploadOption').classList.remove('hidden');
+            document.getElementById('cameraOption').classList.add('hidden');
+            stopCamera();
+        }
+
+        async function showCameraOption() {
+            document.getElementById('uploadOption').classList.add('hidden');
+            document.getElementById('cameraOption').classList.remove('hidden');
+            document.getElementById('retakeContainer').classList.add('hidden');
+            photoTaken = false;
+            await startCamera();
+        }
+
+        async function startCamera() {
+            try {
+                stream = await navigator.mediaDevices.getUserMedia({
+                    video: {
+                        facingMode: 'environment'
+                    }
+                });
+                video.srcObject = stream;
+            } catch (err) {
+                console.error('Error accessing camera:', err);
+                alert('Error accessing camera. Please make sure you have granted camera permissions.');
+            }
+        }
+
+        function stopCamera() {
+            if (stream) {
+                stream.getTracks().forEach(track => track.stop());
+                stream = null;
+            }
+        }
+
+        captureButton.addEventListener('click', function() {
+            if (!photoTaken) {
+                canvas.width = video.videoWidth;
+                canvas.height = video.videoHeight;
+                canvas.getContext('2d').drawImage(video, 0, 0);
+                video.style.display = 'none';
+                canvas.style.display = 'block';
+                document.getElementById('retakeContainer').classList.remove('hidden');
+                captureButton.classList.add('hidden');
+                photoTaken = true;
+                stopCamera();
+            }
+        });
+
+        function retakePhoto() {
+            video.style.display = 'block';
+            canvas.style.display = 'none';
+            document.getElementById('retakeContainer').classList.add('hidden');
+            captureButton.classList.remove('hidden');
+            photoTaken = false;
+            startCamera();
+        }
+
+        async function analyzeFromCamera() {
+            const imageData = canvas.toDataURL('image/jpeg');
+            document.getElementById('loading').style.display = 'block';
+
+            try {
+                const response = await fetch('/analyze', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ imageData })
+                });
+
+                if (!response.ok) {
+                    throw new Error('Failed to analyze image');
+                }
+
+                const result = await response.text();
+                window.location.reload();
+            } catch (error) {
+                console.error('Error:', error);
+                alert('Error analyzing image: ' + error.message);
+                document.getElementById('loading').style.display = 'none';
+            }
+        }
+
+        function previewImage(event) {
+            const file = event.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    document.getElementById('preview').src = e.target.result;
+                    document.getElementById('imagePreview').classList.remove('hidden');
+                }
+                reader.readAsDataURL(file);
+            }
+        }
+
+        function showLoading() {
+            document.getElementById('loading').style.display = 'block';
+        }
+    </script>
+</body>
+</html>
